@@ -1,0 +1,78 @@
+---
+title: "609_Week2_QuartoTidy"
+author: "Hee Joong Choi"
+date: "2026-09-17"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load the packages
+
+```{r}
+#install.packages('tidyr')
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(magrittr)  
+library(forcats)
+```
+
+## Read in the working dataset
+
+```{r}
+# Gibson & Wu's Github repo is cloned in the working directory
+gw <- read.table("NicenboimVasishthPart2/gibsonwu2012data.txt")
+#class(gw)
+
+# basic review of the dataset
+#nrow(gw)
+#head(gw)
+#summary(gw)
+```
+
+## Zoning into the N2 region
+
+```{r}
+gw.n2 <- gw %>%
+  filter(region == "headnoun") %>%
+  mutate(type = fct_relevel(type, "subj-ext", "obj-ext"))
+#head(gw.n2)
+
+gw.n2 %>%
+  group_by(type) %>%
+  tally()
+
+gw.n2.quant <- gw.n2 %>%
+  group_by(type) %>%
+  summarize(
+    meanRT = mean(rt),
+    se = sd(rt)/sqrt(length(rt)))
+head(gw.n2.quant)
+```
+
+## Visualization
+
+In order to compare with Gibson & Wu's (2013) Figure 1, plotting my finding would be a good idea:
+
+```{r}
+#| echo: false
+gw.n2.quant %>%
+  ggplot(aes(x = type, y = meanRT)) +
+  geom_col() +
+  geom_errorbar(
+    aes(ymin = meanRT - se,
+        ymax = meanRT + se),
+    width = 0.2
+  ) +
+  geom_text(
+    aes(label = round(meanRT, digits = 2)),
+    vjust = -3
+  ) + 
+  scale_y_continuous(limits = c(0, 800))
+```
+
+Eyeballing the bar graph's heights and the N2 region in Fig. 1 in Gibson & Wu, the results align quite nicely!
