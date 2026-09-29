@@ -12,11 +12,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Load the packages
 
+More *tidyverse* players annotated in comments following Brian's lecture (on 2026-09-17):
+
 ```{r}
 #install.packages('tidyr')
-library(tidyr)
-library(dplyr)
-library(ggplot2)
+library(tidyr)  # getting data in tidy format
+library(dplyr)  # data manipulation
+library(ggplot2)  # graphics
+#library(readr)   # parsing common file types into necessary format
+#library(stringr)  # string manipulation
 library(magrittr)  
 library(forcats)
 ```
@@ -32,6 +36,7 @@ gw <- read.table("NicenboimVasishthPart2/gibsonwu2012data.txt")
 #nrow(gw)
 #head(gw)
 #summary(gw)
+#glimpse(gw)
 ```
 
 ## Zoning into the N2 region
@@ -50,7 +55,8 @@ gw.n2.quant <- gw.n2 %>%
   group_by(type) %>%
   summarize(
     meanRT = mean(rt),
-    se = sd(rt)/sqrt(length(rt)))
+    se = sd(rt)/sqrt(length(rt))) # standard error of the mean 
+                                  # (how much each subject differs from the mean)
 head(gw.n2.quant)
 ```
 

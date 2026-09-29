@@ -1,0 +1,135 @@
+---
+title: "609_W03_ConjugatePrior"
+author: "Hee Joong Choi"
+date: "2026-09-29"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#install.packages('tidyr')
+library(tidyr)  # getting data in tidy format
+library(dplyr)  # data manipulation
+library(ggplot2)  # graphics
+#library(readr)   # parsing common file types into necessary format
+#library(stringr)  # string manipulation
+library(magrittr)  
+library(forcats)
+```
+
+## Exercise 1: playing around tibbles
+
+### Read in the working dataset
+
+```{r}
+# Gibson & Wu's Github repo is cloned in the working directory
+gw <- read.table("NicenboimVasishthPart2/gibsonwu2012data.txt")
+#class(gw)
+
+# basic review of the dataset
+glimpse(gw)
+```
+
+### Zoning into the N2 region (again)
+
+```{r}
+gw.n2 <- gw %>%
+  filter(region == "headnoun") %>%
+  mutate(type = fct_relevel(type, "subj-ext", "obj-ext"))
+#head(gw.n2)
+
+gw.n2.tbl <- gw.n2 %>%
+  group_by(subj,type) %>%
+  summarize(
+    meanRT = mean(rt)
+  )
+#head(gw.n2.tbl)
+
+gw.n2.diff <- gw.n2.tbl %>%
+  ungroup() %>%
+  pivot_wider(
+    names_from = type,
+    values_from = meanRT
+  ) %>%
+  mutate(
+    meanDiff = `obj-ext` - `subj-ext`
+  ) %>%
+  select(subj, meanDiff)
+glimpse(gw.n2.diff)
+```
+
+## Exercise 2: conjugate priors
+
+1.  Assumptions:
+
+- Population: a Normal distribution with an unknown mean (`mu`) and a known variance (`sigma2`)
+- `sigma2` = var(37 subjects' `meanDiff`) = `sigma0_2`
+
+2.  What's unknown:
+
+- Prior hyperparameters: `mu0` and `sigma0_2` where `mu` \~ N(`mu0`, `sigma0_2`)
+
+3.  Goal: For the posterior distribution, x \~ N(`mu1`, `sigma1_2`), we get the following formulae for the parameters:
+
+- `mu1` = (`mu0`/`sigma0_2`+(`n`\*`xbar`)/`sigma2`) / (1/`sigma0_2`+`n`/`sigma2`)
+- `sigma1_2` = 1 / (1/`sigma0_2`+`n`/`sigma2`) These formulae were taken from the first row of [the continuous distribution table](https://en.wikipedia.org/wiki/Conjugate_prior#When_likelihood_function_is_a_continuous_distribution)
+
+4.  Calculating the known: We're only given three values based on the assumptions:
+
+```{r}
+n <- nrow(gw.n2.diff)               # sample size
+xbar <- mean(gw.n2.diff$meanDiff)   # mean of the observed data
+sigma2 <- var(gw.n2.diff$meanDiff)  # the known population variance = the variance observed
+```
+
+Specifically, the following values are unknown, that is, the prior hyperparameters: - `mu0`: prior mean - `sigma0_2`: prior variance
+
+5.  Next step: Once we know the prior hyperparameters, we have the posterior hyperparameters. In turn, with these updated values, we get the **posterior predictive distribution**:
+
+N(x_new \| `mu1`, `sigma1_2`+`sigma2`)
+
+In a nutshell, this distribution is a weighted average of p(x_new \| *some hyperparameters*), weighted by how likely each distribution is, given the observed data (`gw.n2.diff` in our case).
+
+The upshot of the **conjugate priors** (the posterior probability and the prior are in the same distribution family, a.k.a. **conjugate distributions**) is that it makes it mathematically easier to compute this posterior predictive distribution, since conjugate priors are a *closed-form expression* (like we saw in the beta distribution).
+
+The actual posterior predictive value is not computed due to the general ignorance about the prior hyperparameters. However, it is a ["much more conservative estimate"](https://en.wikipedia.org/wiki/Conjugate_prior#Practical_example) than just using MLE as parameters (0.93 vs. 0.84 in the rental car example).
+
+## Exercise 3: now we have the prior hyperparameters!
+
+```{r}
+mu0 = 0
+sigma0_2 = 90000
+
+# Now we can calculate the posterior hyperparameters by plugging in the values
+posterior.mu = (`mu0`/`sigma0_2`+(`n`*`xbar`)/`sigma2`) / (1/`sigma0_2`+`n`/`sigma2`)
+posterior.var = 1 / (1/`sigma0_2`+`n`/`sigma2`)
+```
+
+## Exercise 4: a plot and an interpretation
+
+-> Probability distribution of the parameters given the data
+
+Let's plot the posterior distribution over `mu`
+
+```{r}
+# using the code provided:
+x <- seq(-400, 400, by = 0.1)
+y <- dnorm(x, mean = posterior.mu, sd = sqrt(posterior.var))
+plot(x, y, type = 'l', xlab = expression(mu),
+ylab = expression(p(mu * "|" * D)),
+main = "Posterior over mean difference given observed data and prior")
+```
+
+Given this plot, I can roughly argue that a range of plausible values of `mu` would be \[-200, -40\], with `posterior.mu` = -120.27. Hence, if I heard that the true underlying difference between conditions ('obj-ext' - 'subj-ext') was -200ms, I would not be so surprised, but I would be if I heard it was +100ms. In the latter case, I would have to think that my sample data is not very representative of the population and consider adding more observations from more subjects.
+
+Since this `gw` dataset is the critical RT difference of ORC and SRC in Mandarin Chinese, we can interpret this outcome to attest the existing accounts for processing RCs in Mandarin. The following factors disfavor SRC (hence, a longer average RT and a negative mu-value):
+
+- **longer distance** between the gap and the head noun (the retrieval memory-based account);
+
+- **more predicted syntactic heads** in the initial analysis (the storage-cost working memory-based account);
+
+- **higher frequency** of the N-V sequence **as a main clause**, requiring a reanalysis (the experience-based account)
+
+Hence, if the true mean difference of the population is +100ms (ORC is read slightly slower than SRC), we would have to come up with a new account of RC processing, at least for Mandarin Chinese.
