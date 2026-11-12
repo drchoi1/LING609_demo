@@ -1,0 +1,117 @@
+---
+title: "Logistic regression"
+author: "Hee Joong Choi"
+format: html
+editor: visual
+---
+
+## Preambles
+```{r, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(brms)
+```
+
+- Install the `bcogsci` package
+```{r}
+# install.packages("remotes")
+remotes::install_github("bnicenboim/bcogsci")
+library(bcogsci)
+```
+
+## Exercise 1
+
+- Load the dataset
+```{r}
+data("df_recall")
+df_recall <- df_recall %>%
+  mutate(c_set_size = set_size - mean(set_size))
+# Set sizes in the data set:
+df_recall$set_size %>%
+  unique() %>% sort()
+```
+
+```{r}
+# Trials by set size
+df_recall %>%
+  group_by(set_size) %>%
+  count()
+
+df_recall
+```
+
+- (Finally,) Fit the `fit_recall` model
+```{r}
+fit_recall <-
+  brm(correct ~ 1 + c_set_size,
+      data = df_recall,
+      family = bernoulli(link = logit),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.1), class = b, coef = c_set_size)))
+```
+```{r}
+posterior_summary(fit_recall,
+                  variable = c("b_Intercept", "b_c_set_size"))
+
+plot(fit_recall)
+```
+```{r}
+# Average accuracy
+alpha_samples <- as_draws_df(fit_recall)$b_Intercept
+av_accuracy <- plogis(alpha_samples)
+c(mean = mean(av_accuracy), quantile(av_accuracy, c(0.025, 0.975)))
+
+# Decrease in accuracy
+beta_samples <- as_draws_df(fit_recall)$b_c_set_size
+odds_ratio <- exp(beta_samples)
+c(mean = mean(odds_ratio),
+  quantile(odds_ratio, c(0.025, 0.975)))
+```
+
+> The posterior mean odds ratio for centered set size was 0.835 (95% credible interval: [0.711, 0.977]), indicating that each additional item in the set was associated with approximately 16.5% lower odds of successful recall.
+
+## Exercise 2
+
+```{r}
+mean(beta_samples < 0)
+```
+
+> Given the observed data and the model, there is a 98% posterior probability that increasing set size decreases the odds of successful recall.
+
+## Exercise 3
+
+```{r}
+# Center the new set size using the original data mean
+c_set_size_10 <- 10 - mean(df_recall$set_size)
+
+# Predicted probability for each posterior draw
+pred_10 <- plogis(alpha_samples + beta_samples * c_set_size_10)
+
+# Posterior mean and 95% CrI
+c(mean = mean(pred_10), quantile(pred_10, c(0.025, 0.975)))
+```
+
+> The posterior mean predicted recall accuracy at set size 10 is 72.3% (95% CrI: [53.3%, 88.1%]).
+However, I have limited confidence in this prediction because set size 10 was never tested. The estimate assumes that the effect of increasing set size remains constant on log-odds scale. The relatively wide CrI (~35%p) also indicates increased uncertainty about the predicted accuracy.
+
+## Exercise 4
+
+> Since `fit_recall` is a logistic regression model fit that already assumed the belief that 
+β ∼ Normal(0, 0.1), the refit would not make any change (apart from Monte Carlo variation).
+
+> Just for sanity, I repeat the same code from Exercise 1 above and double-check:
+
+```{r}
+fit_recall <-
+  brm(correct ~ 1 + c_set_size,
+      data = df_recall,
+      family = bernoulli(link = logit),
+      prior = c(prior(normal(0, 1.5), class = Intercept),
+                prior(normal(0, 0.1), class = b, coef = c_set_size)))
+
+beta_samples <- as_draws_df(fit_recall)$b_c_set_size
+odds_ratio <- exp(beta_samples)
+c(mean = mean(odds_ratio),
+  quantile(odds_ratio, c(0.025, 0.975)))
+```

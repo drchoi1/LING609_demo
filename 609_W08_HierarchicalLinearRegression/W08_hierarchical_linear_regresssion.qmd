@@ -1,0 +1,103 @@
+---
+title: "Hierarchical Linear Regression"
+author: "Hee Joong Choi"
+format: html
+editor: visual
+---
+
+## Preambles
+```{r, echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(brms)
+library(forcats)
+```
+
+## Exercise 1
+
+```{r}
+# Gibson & Wu's Github repo is cloned in the working directory
+gw <- read.table("NicenboimVasishthPart2/gibsonwu2012data.txt")
+#class(gw)
+
+# basic review of the dataset
+glimpse(gw)
+
+# n2-only df (sum coding)
+gw.n2 <- gw %>%
+  filter(region == "headnoun") %>%
+  mutate(
+    type = fct_relevel(type, "subj-ext", "obj-ext"),
+    type_c = if_else(type == "subj-ext", -0.5, 0.5))
+head(gw.n2)
+```
+
+## Exercise 2
+
+```{r}
+summary(gw.n2$rt)
+summary(log(gw.n2$rt))
+hist(gw.n2$rt)
+```
+
+> I choose a **lognormal likelihood** because RTs are strictly positive and typically right-skewed.
+And I specify a **Normal(6, 1)** prior for the intercept, reflecting a plausible baseline median RT of approximately 403 ms (=exp(6)) while allowing uncertainty about the intercept.
+
+```{r}
+fit_RT <- brm(rt ~ 1 + type_c + (1 + type_c | subj) + (1 + type_c | item),
+              data = gw.n2,
+              family = lognormal(),
+              prior = c(
+                prior(normal(6, 1), class = Intercept),
+                prior(normal(0, 0.1), class = b, coef = type_c),
+                prior(normal(0, 1), class = sigma),
+                prior(normal(0, 1), class = sd),
+                prior(lkj(2), class = cor)
+              ))
+posterior_summary(fit_RT, variable = "b_type_c")
+```
+
+Following section 5.3.1 in Nicemboim et al., density plots for the prior and posterior distributions of β are provided:
+
+```{r}
+sample_b_post <- as_draws_df(fit_RT)$b_type_c
+# We generate samples from the prior as well:
+N <- length(sample_b_post)
+sample_b_prior <- rnorm(N, 0, 0.1)
+samples <-
+  tibble(sample = c(sample_b_post, sample_b_prior),
+         distribution = c(rep("posterior", N), rep("prior", N)))
+ggplot(samples, aes(x = sample, fill = distribution)) +
+  geom_density(alpha = 0.5)
+```
+
+> A posterior shifted away from zero = the data have updated beliefs;
+> A narrower posterior = the data have reduced uncertainty about β.
+
+- Check model convergence and how well it fit
+
+> Model converged very well with Rhat = 1.00 across the board. ESS values look reasonably large enough too.
+
+```{r}
+summary(fit_RT)
+```
+
+> Although the lognormal likelihood captures the overall right-skewed shape of the observed RT distribution,
+posterior predictive checks reveal systematic discrepancies; the model consistently predicts minimum RTs substantially below the observedminimum of 172 ms. 
+
+```{r}
+pp_check(fit_RT, type = "dens_overlay", ndraws = 100)
+pp_check(fit_RT, type = "stat", stat = "min")
+pp_check(fit_RT, type = "stat", stat = "max")
+```
+
+## Exercise 3
+
+> The posterior mean effect of extraction type was −0.056 (95% credible interval: 
+[−0.147, 0.037]). Since ORCs were coded as +0.5 and SRCS as -0.5, this corresponds to 
+~5.4% shorter RTs for ORCs than SRCs (the negative coefficient = the positive factor, ORC, 
+gets smaller RTs compared to the negative factor, SRC),contrary to Gibson and Wu's prediction. 
+However, CrI includes zero, meaning there is a visible uncertainty about 
+the direction of the effect. Thus, the model does not provide convincing evidence 
+that ORCs are read more slowly(/fastly) than SRCs.
